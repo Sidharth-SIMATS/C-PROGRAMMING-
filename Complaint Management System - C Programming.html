@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Complaint Management System - C Programming</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f2f2f2;color:#222;line-height:1.5}
+header{background:#2b4c7e;color:#fff;padding:18px 16px}
+header h1{margin:0 0 4px;font-size:24px}
+header p{margin:0;font-size:14px}
+nav{background:#1f3a5f;padding:8px 16px}
+nav a{color:#fff;margin-right:16px;font-size:14px}
+.page{max-width:900px;margin:0 auto;padding:10px 16px 30px}
+h2{border-bottom:2px solid #2b4c7e;padding-bottom:3px;margin-top:28px;color:#2b4c7e;font-size:20px}
+.box{background:#fff;border:1px solid #bbb;padding:10px 12px;margin:10px 0}
+input,select,textarea{width:100%;padding:5px;margin:3px 0 8px;font-size:14px}
+button{padding:5px 12px;font-size:14px;cursor:pointer}
+.cols{display:flex;flex-wrap:wrap;gap:12px}.cols .box{flex:1 1 280px}
+pre{background:#222;color:#ddd;padding:10px;overflow:auto;font-size:13px;margin:6px 0}
+#log{height:170px}
+table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}
+td,th{border:1px solid #999;padding:4px 6px;text-align:left}
+th{background:#dde6f3}
+.wrap{overflow-x:auto}
+footer{font-size:12px;color:#555;margin-top:30px}
+</style>
+</head>
+<body>
+<header>
+<h1>Multi-User Network-Based Complaint Management System</h1>
+<p>SLT-A C Programming | Yoganathan V (192312638), Arun S (192312658), Sidharth S (1965260088) | Guide: Mr. Uma Maheshwara Rao V</p>
+</header>
+<nav><a href="#intro">Introduction</a><a href="#arch">Architecture</a><a href="#demo">Demo</a><a href="#code">Code</a></nav>
+<div class="page">
+
+<h2 id="intro">Introduction</h2>
+<p>This is a network based application written in C. Users send campus maintenance complaints to a central server. Every complaint gets a unique ID and is saved in a file, and staff can change the status later. The user can check the status using the ID.</p>
+<p><b>Problem:</b> complaints come through paper notes or messages, so they get missed or delayed, nobody knows if it is pending or resolved, and records are scattered.</p>
+<p><b>Objectives:</b></p>
+<ul>
+<li>keep all complaints in one place on the server</li>
+<li>let many clients connect at the same time</li>
+<li>unique ID for every complaint</li>
+<li>staff can view and update status (PENDING, IN_PROGRESS, RESOLVED)</li>
+<li>use a mutex so two clients dont write the file together</li>
+</ul>
+
+<h2 id="arch">Architecture</h2>
+<pre>User client  --\
+                 TCP --&gt; C Server (one thread per client + mutex) --&gt; complaints file
+Staff client --/</pre>
+<p>Server steps: socket() &rarr; bind() &rarr; listen() &rarr; accept() &rarr; pthread_create() &rarr; recv() / send()</p>
+
+<h2 id="demo">Demo</h2>
+<p>This is just a simulation of the C program in the browser (no real sockets). Submit a complaint, then update it in the staff box and track it.</p>
+<div class="cols">
+<div class="box"><b>User client</b><br>
+Name<input id="un">
+Category<select id="uc"><option>Electrical</option><option>Plumbing</option><option>Civil</option><option>Network</option></select>
+Description<textarea id="ud" rows="2"></textarea>
+<button onclick="submitC()">Submit</button>
+<hr>
+Complaint ID<input id="ti" placeholder="CMP1001">
+<button onclick="trackC()">Track</button>
+<p id="um"></p></div>
+<div class="box"><b>Staff client</b><br>
+Complaint ID<input id="si" placeholder="CMP1001">
+New status<select id="ss"><option>IN_PROGRESS</option><option>RESOLVED</option></select>
+<button onclick="updateC()">Update</button>
+<p id="sm"></p></div>
+</div>
+<b>Server log</b>
+<pre id="log">[SERVER] Complaint server started
+[SERVER] Listening on port 8080 ...
+</pre>
+<b>complaints file</b>
+<div class="wrap"><table><thead><tr><th>ID</th><th>User</th><th>Category</th><th>Description</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div>
+
+<h2 id="code">Code</h2>
+<p>Compile: gcc server.c -o server -pthread (Linux)</p>
+<b>complaint.h</b><pre id="c1"></pre>
+<b>server.c</b><pre id="c2"></pre>
+<b>client.c</b><pre id="c3"></pre>
+
+<footer>References: Kernighan and Ritchie, The C Programming Language; Stevens, UNIX Network Programming Vol 1; Beej's Guide to Network Programming; Linux man pages.</footer>
+</div>
+<script>
+var recs=[],nextId=1001,thread=0;
+function $(i){return document.getElementById(i)}
+function log(t){var l=$('log');l.textContent+=t+"\n";l.scrollTop=l.scrollHeight}
+function start(type){thread++;var t='[THREAD '+thread+'] ';log('');log(t+'Client connected: 127.0.0.1');log(t+'Received request: '+type);return t}
+function find(id){id=id.trim().toUpperCase();for(var i=0;i<recs.length;i++){if('CMP'+recs[i].id==id)return recs[i]}return null}
+function show(){
+  var tb=$('rows');tb.innerHTML='';
+  recs.forEach(function(c){
+    var tr=document.createElement('tr');
+    ['CMP'+c.id,c.user,c.cat,c.desc,c.status].forEach(function(v){var td=document.createElement('td');td.textContent=v;tr.appendChild(td)});
+    tb.appendChild(tr)})
+}
+function submitC(){
+  var n=$('un').value.trim(),d=$('ud').value.trim();
+  if(n==''||d==''){$('um').textContent='Please enter name and description';return}
+  var t=start('SUBMIT_COMPLAINT');
+  log(t+'pthread_mutex_lock');
+  var c={id:nextId++,user:n,cat:$('uc').value,desc:d,status:'PENDING'};
+  recs.push(c);
+  log(t+'Complaint CMP'+c.id+' saved');
+  log(t+'pthread_mutex_unlock');
+  $('um').textContent='Complaint submitted. ID: CMP'+c.id+' Status: PENDING';
+  $('ti').value='CMP'+c.id;$('si').value='CMP'+c.id;
+  show();
+}
+function trackC(){
+  var t=start('TRACK_COMPLAINT');
+  var c=find($('ti').value);
+  if(!c){log(t+'ID not found');$('um').textContent='Complaint not found';return}
+  log(t+'Sent status: '+c.status);
+  $('um').textContent='CMP'+c.id+' | '+c.cat+' | '+c.desc+' | Status: '+c.status;
+}
+function updateC(){
+  var t=start('UPDATE_STATUS');
+  var c=find($('si').value);
+  if(!c){log(t+'ID not found');$('sm').textContent='Complaint not found';return}
+  var o=['PENDING','IN_PROGRESS','RESOLVED'],ns=$('ss').value;
+  if(o.indexOf(ns)<=o.indexOf(c.status)){log(t+'Update rejected');$('sm').textContent='Cannot go back to '+ns+' (now '+c.status+')';return}
+  log(t+'pthread_mutex_lock');
+  c.status=ns;
+  log(t+'CMP'+c.id+' -> '+ns);
+  log(t+'pthread_mutex_unlock');
+  $('sm').textContent='Status updated to '+ns;
+  show();
+}
+const SRC={
+"complaint.h":`#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    int  complaint_id;
+    char user_name[50];
+    char category[30];
+    char description[200];
+    char status[15];      /* PENDING | IN_PROGRESS | RESOLVED */
+} Complaint;`,
+"server.c":`#include "complaint.h"
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+#define PORT 8080
+static pthread_mutex_t file_lock = PTHREAD_MUTEX_INITIALIZER;
+static int next_id = 1001;
+
+void *handle_client(void *arg) {
+    int fd = *(int *)arg;  free(arg);
+    char buf[512], reply[256];
+    int n = recv(fd, buf, sizeof buf - 1, 0);
+    if (n > 0) {
+        buf[n] = '\\0';
+        if (strncmp(buf, "SUBMIT|", 7) == 0) {
+            Complaint c;
+            sscanf(buf + 7, "%49[^|]|%29[^|]|%199[^\\n]",
+                   c.user_name, c.category, c.description);
+            pthread_mutex_lock(&file_lock);      /* critical section */
+            c.complaint_id = next_id++;
+            strcpy(c.status, "PENDING");
+            FILE *fp = fopen("complaints.dat", "ab");
+            fwrite(&c, sizeof c, 1, fp);
+            fclose(fp);
+            pthread_mutex_unlock(&file_lock);
+            snprintf(reply, sizeof reply, "OK|CMP%d|PENDING", c.complaint_id);
+        } else {
+            snprintf(reply, sizeof reply, "ERR|unknown request");
+        }
+        send(fd, reply, strlen(reply), 0);
+    }
+    close(fd);
+    return NULL;
+}
+
+int main(void) {
+    int srv = socket(AF_INET, SOCK_STREAM, 0);
+    int yes = 1;
+    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
+    struct sockaddr_in a = {0};
+    a.sin_family = AF_INET;
+    a.sin_addr.s_addr = INADDR_ANY;
+    a.sin_port = htons(PORT);
+    bind(srv, (struct sockaddr *)&a, sizeof a);
+    listen(srv, 10);
+    printf("[SERVER] Listening on port %d ...\\n", PORT);
+    for (;;) {
+        int *cfd = malloc(sizeof *cfd);
+        *cfd = accept(srv, NULL, NULL);
+        pthread_t t;
+        pthread_create(&t, NULL, handle_client, cfd);
+        pthread_detach(t);
+    }
+}`,
+"client.c":`#include "complaint.h"
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+
+int main(void) {
+    char name[50], cat[30], desc[200], msg[300], reply[256];
+    printf("Enter name: ");        scanf(" %49[^\\n]", name);
+    printf("Enter category: ");    scanf(" %29[^\\n]", cat);
+    printf("Enter description: "); scanf(" %199[^\\n]", desc);
+    if (!*name || !*desc) { puts("Required input missing"); return 1; }
+
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in s = {0};
+    s.sin_family = AF_INET;
+    s.sin_port = htons(8080);
+    inet_pton(AF_INET, "127.0.0.1", &s.sin_addr);
+    if (connect(fd, (struct sockaddr *)&s, sizeof s) < 0) { perror("connect"); return 1; }
+
+    snprintf(msg, sizeof msg, "SUBMIT|%s|%s|%s", name, cat, desc);
+    send(fd, msg, strlen(msg), 0);
+    int n = recv(fd, reply, sizeof reply - 1, 0);
+    if (n > 0) { reply[n] = '\\0'; printf("Server: %s\\n", reply); }
+    close(fd);
+    return 0;
+}`};
+$('c1').textContent=SRC['complaint.h'];$('c2').textContent=SRC['server.c'];$('c3').textContent=SRC['client.c'];
+</script>
+</body>
+</html>
